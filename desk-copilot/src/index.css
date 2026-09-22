@@ -1,0 +1,46 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Karla:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-base: #f7f1e2;
+  --color-surface: #fffdf7;
+  --color-surface-raised: #fbf3de;
+  --color-divider: #e7dcc3;
+  --color-ink: #2b2320;
+  --color-ink-muted: #857a6e;
+  --color-accent: #3e6259;
+  --color-accent-soft: #dce8e1;
+  --color-caution: #a9752e;
+  --color-caution-soft: #f3e4c9;
+
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Karla', ui-sans-serif, sans-serif;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-base);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
