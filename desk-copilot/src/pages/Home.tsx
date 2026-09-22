@@ -1,6 +1,6 @@
 import { useWatches } from '../hooks/useWatches'
 import { useReports } from '../hooks/useReports'
-import { WatchRail } from '../components/watchRail'
+import { WatchRail } from '../components/WatchRail'
 import { QueryPrompt } from '../components/QueryPrompt'
 import { ReportCard } from '../components/ReportCard'
 
