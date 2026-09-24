@@ -8,6 +8,15 @@ const MCP_TIMEOUT_MS = 6000
 
 type SkillId = 'macro-analyst' | 'market-intel' | 'news-briefing' | 'sentiment-analyst'
 
+interface VercelLikeReq {
+  method?: string
+  body?: unknown
+}
+interface VercelLikeRes {
+  status: (code: number) => VercelLikeRes
+  json: (body: unknown) => void
+}
+
 const SKILL_CALLS: Record<SkillId, { tool: string; args: Record<string, unknown> }[]> = {
   'macro-analyst': [
     { tool: 'rates_yields', args: { action: 'rates_snapshot' } },
@@ -27,11 +36,6 @@ const SKILL_CALLS: Record<SkillId, { tool: string; args: Record<string, unknown>
   ],
 }
 
-// Races the real MCP call against a timeout — without this, a stuck
-// connection (bad DNS, unreachable host, slow server) blocks the
-// serverless function indefinitely, which the client above then
-// also waits on. Failing fast here is what lets the client's own
-// fallback-to-mock logic actually kick in within a few seconds.
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
@@ -45,7 +49,6 @@ async function callMcpSkill(skill: SkillId) {
 
   try {
     await withTimeout(client.connect(transport), MCP_TIMEOUT_MS)
-
     const calls = SKILL_CALLS[skill]
     const results = await withTimeout(
       Promise.all(calls.map((c) => client.callTool({ name: c.tool, arguments: c.args }))),
@@ -53,35 +56,29 @@ async function callMcpSkill(skill: SkillId) {
     )
     return results
   } finally {
-    await client.close().catch(() => {
-      // best-effort cleanup — a close failure shouldn't mask the real result/error
-    })
+    await client.close().catch(() => {})
   }
 }
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: VercelLikeReq, res: VercelLikeRes): Promise<void> {
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'POST only' }), { status: 405 })
+    res.status(405).json({ error: 'POST only' })
+    return
   }
 
-  const { skill } = (await req.json()) as { skill: SkillId }
+  const { skill } = (req.body ?? {}) as { skill: SkillId }
 
   if ((skill as string) === 'technical-analysis') {
-    return new Response(
-      JSON.stringify({ error: 'technical-analysis not wired — requires local Python indicator computation' }),
-      { status: 501 }
-    )
+    res.status(501).json({
+      error: 'technical-analysis not wired — requires local Python indicator computation',
+    })
+    return
   }
 
   try {
     const raw = await callMcpSkill(skill)
-    return new Response(JSON.stringify({ skill, raw }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    res.status(200).json({ skill, raw })
   } catch (err) {
-    return new Response(JSON.stringify({ error: 'mcp call failed or timed out', detail: String(err) }), {
-      status: 502,
-    })
+    res.status(502).json({ error: 'mcp call failed or timed out', detail: String(err) })
   }
 }

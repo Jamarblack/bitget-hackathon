@@ -12,6 +12,20 @@ interface RequestBody {
   skillResults: SkillResultIn[]
 }
 
+// Vercel's Node.js runtime (as opposed to Edge) uses this Express-like
+// shape, not the Fetch API Request/Response — req.body is pre-parsed
+// JSON, and you write the response via res.status().json() rather than
+// returning a Response object. Using @vercel/node's types would also
+// work, but this avoids adding another dependency just for types.
+interface VercelLikeReq {
+  method?: string
+  body?: unknown
+}
+interface VercelLikeRes {
+  status: (code: number) => VercelLikeRes
+  json: (body: unknown) => void
+}
+
 const SYSTEM_PROMPT = `You are the synthesis layer of Plain Money, a market
 explainer for everyday people who own a few stocks or are curious about
 investing — not active traders. They don't speak finance jargon.
@@ -23,10 +37,10 @@ plain-English answer. Respond with ONLY valid JSON, no markdown fences,
 no preamble, matching exactly this shape:
 
 {
-  "headline": string,        // one plain-English sentence answering their question directly, no jargon
-  "supportingSignals": [ { "skill": string, "point": string } ],  // each point in plain language, use a simple analogy if it helps
-  "riskFlags": [string],     // "things that could go wrong" or "reasons to be cautious" — phrased for a non-expert, not technical risk language
-  "confidence": "low" | "medium" | "high"  // how sure the picture is, given the evidence
+  "headline": string,
+  "supportingSignals": [ { "skill": string, "point": string } ],
+  "riskFlags": [string],
+  "confidence": "low" | "medium" | "high"
 }
 
 Rules: no unexplained financial jargon (if you must use a term like
@@ -34,28 +48,21 @@ Rules: no unexplained financial jargon (if you must use a term like
 everyday comparisons over statistics. Never sound alarmist — explain risk
 calmly.`
 
-// Server-side timeout for the upstream Qwen call. Without this, a slow
-// or unreachable upstream leaves the serverless function running well
-// past the client's own timeout (confirmed in testing: vercel dev
-// flagged the function still running after 30s) — wasting execution
-// time and, on a real deployment, risking the platform's own hard
-// function-duration limit instead of failing cleanly on our terms.
 const UPSTREAM_TIMEOUT_MS = 20000
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: VercelLikeReq, res: VercelLikeRes): Promise<void> {
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'POST only' }), { status: 405 })
+    res.status(405).json({ error: 'POST only' })
+    return
   }
 
   const apiKey = process.env.QWEN_API_KEY
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'QWEN_API_KEY not configured on server' }), {
-      status: 500,
-    })
+    res.status(500).json({ error: 'QWEN_API_KEY not configured on server' })
+    return
   }
 
-  const body = (await req.json()) as RequestBody
-  const { query, watch, skillResults } = body
+  const { query, watch, skillResults } = (req.body ?? {}) as RequestBody
   const userContent = JSON.stringify({ query, watch, skillResults })
 
   const controller = new AbortController()
@@ -81,7 +88,8 @@ export default async function handler(req: Request): Promise<Response> {
 
     if (!upstream.ok) {
       const text = await upstream.text()
-      return new Response(JSON.stringify({ error: 'upstream error', detail: text }), { status: 502 })
+      res.status(502).json({ error: 'upstream error', detail: text })
+      return
     }
 
     const data = await upstream.json()
@@ -89,19 +97,13 @@ export default async function handler(req: Request): Promise<Response> {
     const cleaned = raw.replace(/```json|```/g, '').trim()
     const parsed = JSON.parse(cleaned)
 
-    return new Response(JSON.stringify(parsed), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    res.status(200).json(parsed)
   } catch (err) {
     const isTimeout = err instanceof Error && err.name === 'AbortError'
-    return new Response(
-      JSON.stringify({
-        error: isTimeout ? 'upstream timed out' : 'synthesis failed',
-        detail: String(err),
-      }),
-      { status: isTimeout ? 504 : 500 }
-    )
+    res.status(isTimeout ? 504 : 500).json({
+      error: isTimeout ? 'upstream timed out' : 'synthesis failed',
+      detail: String(err),
+    })
   } finally {
     clearTimeout(timeout)
   }
