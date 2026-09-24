@@ -20,11 +20,16 @@ function buildMockSynthesis(
   }
 }
 
+const SYNTHESIS_TIMEOUT_MS = 15000
+
 async function synthesizeViaApi(
   query: string,
   skillResults: SkillResult[],
   watch: Watch | null
 ): Promise<Pick<ResearchReport, 'headline' | 'supportingSignals' | 'riskFlags' | 'confidence'> | null> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), SYNTHESIS_TIMEOUT_MS)
+
   try {
     const res = await fetch('/api/synthesize', {
       method: 'POST',
@@ -36,13 +41,17 @@ async function synthesizeViaApi(
           : null,
         skillResults: skillResults.map((r) => ({ skill: r.skill, label: r.label, summary: r.summary })),
       }),
+      signal: controller.signal,
     })
     if (!res.ok) return null
     const data = await res.json()
     if (!data.headline || !Array.isArray(data.supportingSignals)) return null
     return data
   } catch {
+    // Covers network failure AND our own timeout abort.
     return null
+  } finally {
+    clearTimeout(timeout)
   }
 }
 

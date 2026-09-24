@@ -34,6 +34,14 @@ Rules: no unexplained financial jargon (if you must use a term like
 everyday comparisons over statistics. Never sound alarmist — explain risk
 calmly.`
 
+// Server-side timeout for the upstream Qwen call. Without this, a slow
+// or unreachable upstream leaves the serverless function running well
+// past the client's own timeout (confirmed in testing: vercel dev
+// flagged the function still running after 30s) — wasting execution
+// time and, on a real deployment, risking the platform's own hard
+// function-duration limit instead of failing cleanly on our terms.
+const UPSTREAM_TIMEOUT_MS = 20000
+
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST only' }), { status: 405 })
@@ -50,6 +58,9 @@ export default async function handler(req: Request): Promise<Response> {
   const { query, watch, skillResults } = body
   const userContent = JSON.stringify({ query, watch, skillResults })
 
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS)
+
   try {
     const upstream = await fetch('https://hackathon.bitgetops.com/v1/chat/completions', {
       method: 'POST',
@@ -65,6 +76,7 @@ export default async function handler(req: Request): Promise<Response> {
         ],
         temperature: 0.3,
       }),
+      signal: controller.signal,
     })
 
     if (!upstream.ok) {
@@ -82,6 +94,15 @@ export default async function handler(req: Request): Promise<Response> {
       headers: { 'Content-Type': 'application/json' },
     })
   } catch (err) {
-    return new Response(JSON.stringify({ error: 'synthesis failed', detail: String(err) }), { status: 500 })
+    const isTimeout = err instanceof Error && err.name === 'AbortError'
+    return new Response(
+      JSON.stringify({
+        error: isTimeout ? 'upstream timed out' : 'synthesis failed',
+        detail: String(err),
+      }),
+      { status: isTimeout ? 504 : 500 }
+    )
+  } finally {
+    clearTimeout(timeout)
   }
 }

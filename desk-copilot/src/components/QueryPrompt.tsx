@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface Props {
   onSubmit: (query: string) => void
@@ -8,6 +8,30 @@ interface Props {
 
 export function QueryPrompt({ onSubmit, running, activeTickerHint }: Props) {
   const [value, setValue] = useState('')
+  const [placeholderIndex, setPlaceholderIndex] = useState(0)
+
+  // Rotating suggestions tailored to your rToken/US-stock thesis
+  const suggestions = activeTickerHint
+    ? [
+        `Ask anything about ${activeTickerHint}...`,
+        `Any weekend macro events affecting ${activeTickerHint}?`,
+        `How is the sentiment for ${activeTickerHint} today?`,
+        `What are the technical risk flags for ${activeTickerHint}?`
+      ]
+    : [
+        'Why did tech stocks drop today?',
+        'Any weekend macro events I should know about?',
+        'Show me the sentiment for NVDA right now...',
+        'What is the narrative around AI stocks?'
+      ]
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % suggestions.length)
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [suggestions.length])
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -24,11 +48,7 @@ export function QueryPrompt({ onSubmit, running, activeTickerHint }: Props) {
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder={
-          activeTickerHint
-            ? `Ask anything about ${activeTickerHint}, or something else entirely`
-            : 'Why did my stocks drop today?'
-        }
+        placeholder={suggestions[placeholderIndex]}
         disabled={running}
         className="flex-1 rounded-full border border-[var(--color-divider)] bg-[var(--color-surface)] px-4 py-2.5 font-body text-sm text-[var(--color-ink)] placeholder:text-[var(--color-ink-muted)] focus:outline-none"
       />

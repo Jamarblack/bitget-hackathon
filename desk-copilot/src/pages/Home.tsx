@@ -1,29 +1,79 @@
+import { useState } from 'react'
 import { useWatches } from '../hooks/useWatches'
 import { useReports } from '../hooks/useReports'
 import { WatchRail } from '../components/WatchRail'
 import { QueryPrompt } from '../components/QueryPrompt'
 import { ReportCard } from '../components/ReportCard'
 
-export function Home() {
+interface Props {
+  onBack: () => void
+}
+
+export function Home({ onBack }: Props) {
   const { watches, activeWatch, activeId, setActiveId, addWatch } = useWatches()
   const { reports, submitQuery, running } = useReports()
+  const [railOpen, setRailOpen] = useState(false)
 
   return (
-    <div className="flex h-screen bg-[var(--color-base)]">
-      <WatchRail watches={watches} activeId={activeId} onSelect={setActiveId} onCreate={addWatch} />
+    <div className="flex h-screen flex-col overflow-hidden bg-[var(--color-base)] md:flex-row">
+      {/* Mobile-only top bar: sidebar is a drawer here instead of a persistent column */}
+      <div className="flex items-center justify-between border-b border-[var(--color-divider)] px-4 py-3 md:hidden">
+        <button
+          onClick={() => setRailOpen(true)}
+          className="font-body text-sm text-[var(--color-ink)]"
+        >
+          ☰ Stocks
+        </button>
+        <p className="font-display text-base text-[var(--color-ink)]">Plain Money</p>
+        <button onClick={onBack} className="font-body text-sm text-[var(--color-ink-muted)]">
+          About
+        </button>
+      </div>
+
+      {railOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/30 md:hidden"
+          onClick={() => setRailOpen(false)}
+        />
+      )}
+      <div className={`${railOpen ? 'fixed inset-y-0 left-0 z-50 flex' : 'hidden'} md:static md:z-auto md:flex`}>
+        <WatchRail
+          watches={watches}
+          activeId={activeId}
+          onSelect={(id) => {
+            setActiveId(id)
+            setRailOpen(false)
+          }}
+          onCreate={addWatch}
+        />
+      </div>
 
       <main className="flex flex-1 flex-col items-center overflow-hidden">
-        <div className="w-full max-w-xl border-b border-[var(--color-divider)] px-6 py-5">
-          <p className="font-body text-sm text-[var(--color-ink-muted)]">
-            {activeWatch ? `Watching ${activeWatch.ticker}` : 'Ask about anything'}
-          </p>
-          {activeWatch && (
-            <p className="mt-0.5 font-display text-lg text-[var(--color-ink)]">
-              {activeWatch.timeframe}
-              {activeWatch.note ? ` — ${activeWatch.note}` : ''}
+        <div className="hidden w-full max-w-xl items-baseline justify-between border-b border-[var(--color-divider)] px-6 py-5 md:flex">
+          <div>
+            <p className="font-body text-sm text-[var(--color-ink-muted)]">
+              {activeWatch ? `Watching ${activeWatch.ticker}` : 'Ask about anything'}
             </p>
-          )}
+            {activeWatch && (
+              <p className="mt-0.5 font-display text-lg text-[var(--color-ink)]">
+                {activeWatch.timeframe}
+                {activeWatch.note ? ` — ${activeWatch.note}` : ''}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={onBack}
+            className="font-body text-sm text-[var(--color-ink-muted)] hover:text-[var(--color-accent)]"
+          >
+            About
+          </button>
         </div>
+
+        {activeWatch && (
+          <div className="w-full max-w-xl px-6 py-3 md:hidden">
+            <p className="font-body text-sm text-[var(--color-ink-muted)]">Watching {activeWatch.ticker}</p>
+          </div>
+        )}
 
         <div className="w-full max-w-xl flex-1 overflow-y-auto px-6">
           {reports.length === 0 ? (
