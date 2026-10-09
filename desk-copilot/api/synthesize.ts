@@ -12,11 +12,9 @@ interface RequestBody {
   skillResults: SkillResultIn[]
 }
 
-// Vercel's Node.js runtime (as opposed to Edge) uses this Express-like
-// shape, not the Fetch API Request/Response — req.body is pre-parsed
-// JSON, and you write the response via res.status().json() rather than
-// returning a Response object. Using @vercel/node's types would also
-// work, but this avoids adding another dependency just for types.
+// Vercel's Node.js runtime passes an Express-like req/res, not the Fetch
+// API Request/Response: req.body is pre-parsed JSON and replies go through
+// res.status().json().
 interface VercelLikeReq {
   method?: string
   body?: unknown
@@ -50,15 +48,32 @@ calmly.`
 
 const UPSTREAM_TIMEOUT_MS = 20000
 
+// Models sometimes wrap JSON in prose, <think> blocks or code fences.
+// Pull out the outermost {...} instead of assuming a perfectly clean reply.
+function extractJson(raw: string): unknown {
+  const noThink = raw.replace(/<think>[\s\S]*?<\/think>/g, '')
+  const start = noThink.indexOf('{')
+  const end = noThink.lastIndexOf('}')
+  if (start === -1 || end <= start) throw new Error('no JSON object found in model reply')
+  return JSON.parse(noThink.slice(start, end + 1))
+}
+
+function fail(res: VercelLikeRes, status: number, error: string, detail: string): void {
+  // console.error so the failure shows up in Vercel's function logs too —
+  // earlier failures returned a status silently and left the logs empty.
+  console.error(`[api/synthesize] ${error}: ${detail}`)
+  res.status(status).json({ error, detail })
+}
+
 export default async function handler(req: VercelLikeReq, res: VercelLikeRes): Promise<void> {
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'POST only' })
+    fail(res, 405, 'method not allowed', 'POST only')
     return
   }
 
   const apiKey = process.env.QWEN_API_KEY
   if (!apiKey) {
-    res.status(500).json({ error: 'QWEN_API_KEY not configured on server' })
+    fail(res, 500, 'server misconfigured', 'QWEN_API_KEY is not set in this deployment environment')
     return
   }
 
@@ -88,22 +103,26 @@ export default async function handler(req: VercelLikeReq, res: VercelLikeRes): P
 
     if (!upstream.ok) {
       const text = await upstream.text()
-      res.status(502).json({ error: 'upstream error', detail: text })
+      fail(res, 502, 'qwen upstream error', `status ${upstream.status}: ${text.slice(0, 300)}`)
       return
     }
 
     const data = await upstream.json()
     const raw: string = data.choices?.[0]?.message?.content ?? ''
-    const cleaned = raw.replace(/```json|```/g, '').trim()
-    const parsed = JSON.parse(cleaned)
+    if (!raw) {
+      fail(res, 502, 'qwen returned no content', JSON.stringify(data).slice(0, 300))
+      return
+    }
 
-    res.status(200).json(parsed)
+    res.status(200).json(extractJson(raw))
   } catch (err) {
     const isTimeout = err instanceof Error && err.name === 'AbortError'
-    res.status(isTimeout ? 504 : 500).json({
-      error: isTimeout ? 'upstream timed out' : 'synthesis failed',
-      detail: String(err),
-    })
+    fail(
+      res,
+      isTimeout ? 504 : 500,
+      isTimeout ? 'qwen timed out' : 'synthesis failed',
+      String(err)
+    )
   } finally {
     clearTimeout(timeout)
   }
