@@ -4,7 +4,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 export const config = { runtime: 'nodejs' }
 
 const MCP_URL = 'https://datahub.noxiaohao.com/mcp'
-const MCP_TIMEOUT_MS = 6000
+const MCP_TIMEOUT_MS = 15000
 
 type SkillId = 'macro-analyst' | 'market-intel' | 'news-briefing' | 'sentiment-analyst'
 

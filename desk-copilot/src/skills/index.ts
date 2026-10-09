@@ -17,7 +17,7 @@ const SKILL_LABELS: Record<SkillId, string> = {
   'technical-analysis': 'Technical Analysis',
 }
 
-const SKILL_TIMEOUT_MS = 8000
+const SKILL_TIMEOUT_MS = 35000
 
 async function mockResult(skill: SkillId, query: string, reason: string): Promise<SkillResult> {
   await new Promise((r) => setTimeout(r, 150 + Math.random() * 250))

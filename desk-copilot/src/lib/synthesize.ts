@@ -5,7 +5,7 @@ import { routeQuery } from './router'
 type SynthesisFields = Pick<ResearchReport, 'headline' | 'supportingSignals' | 'riskFlags' | 'confidence'>
 type SynthesisAttempt = { ok: true; data: SynthesisFields } | { ok: false; reason: string }
 
-const SYNTHESIS_TIMEOUT_MS = 15000
+const SYNTHESIS_TIMEOUT_MS = 55000
 
 function buildMockSynthesis(
   query: string,

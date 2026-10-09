@@ -46,7 +46,7 @@ Rules: no unexplained financial jargon (if you must use a term like
 everyday comparisons over statistics. Never sound alarmist — explain risk
 calmly.`
 
-const UPSTREAM_TIMEOUT_MS = 20000
+const UPSTREAM_TIMEOUT_MS = 50000
 
 // Models sometimes wrap JSON in prose, <think> blocks or code fences.
 // Pull out the outermost {...} instead of assuming a perfectly clean reply.
