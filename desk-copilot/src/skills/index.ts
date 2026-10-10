@@ -221,8 +221,8 @@ export async function callSkill(skill: SkillId, query: string): Promise<SkillRes
   }
 }
 
-export async function callSkills(skills: SkillId[], query: string): Promise<SkillResult[]> {
-  return Promise.all(skills.map((s) => callSkill(s, query)))
+export async function callSkill(skill: SkillId, query: string): Promise<SkillResult> {
+  return mockResult(skill, query, 'demo mode active')
 }
 
 export const ALL_SKILLS: SkillId[] = [
