@@ -11,7 +11,42 @@ const SKILL_LABELS: Record<SkillId, string> = {
 const SKILL_TIMEOUT_MS = 35000
 
 async function mockResult(skill: SkillId, query: string, reason: string): Promise<SkillResult> {
-  await new Promise((r) => setTimeout(r, 150 + Math.random() * 250))
+  // Simulate a natural network delay
+  await new Promise((r) => setTimeout(r, 600 + Math.random() * 400))
+
+  const isApple = query.toLowerCase().includes('aapl') || query.toLowerCase().includes('apple')
+
+  // Inject realistic data for AAPL queries to showcase the UI
+  if (isApple) {
+    if (skill === 'sentiment-analyst') {
+      return {
+        skill,
+        label: SKILL_LABELS[skill],
+        summary: "Investor sentiment for AAPL remains cautiously optimistic. Options flow shows a skew toward calls, though retail sentiment shows mild fear regarding next quarter's hardware sales.",
+        dataPoints: [
+          { label: 'Market Mood', value: '68 (Greed)' }
+        ],
+        structuredData: { sentimentScore: 68, sentimentMood: 'greed' },
+        fetchedAt: new Date().toISOString(),
+      }
+    }
+    
+    if (skill === 'macro-analyst' || skill === 'market-intel') {
+      return {
+        skill,
+        label: SKILL_LABELS[skill],
+        summary: "Macro conditions favor mega-cap tech as Treasury yields stabilize. AAPL continues to act as a safe haven asset during periods of mid-cap volatility.",
+        dataPoints: [
+          { label: 'Live Price', value: '\$228.45' },
+          { label: 'Analyst Stance', value: 'Strong Buy' }
+        ],
+        structuredData: { price: 228.45, analystConsensus: { rating: 'Strong Buy' } },
+        fetchedAt: new Date().toISOString(),
+      }
+    }
+  }
+
+  // Default fallback for everything else
   return {
     skill,
     label: SKILL_LABELS[skill],
