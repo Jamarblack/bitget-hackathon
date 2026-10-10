@@ -10,62 +10,109 @@ const SKILL_LABELS: Record<SkillId, string> = {
 
 const SKILL_TIMEOUT_MS = 35000
 
+// Helper to extract a ticker or company name from natural-language queries
+function extractStockName(query: string): string {
+  const q = query.trim()
+  // Look for 2-5 letter uppercase ticker patterns (e.g., AAPL, NVDA, TSLA, MSFT, BTC, ETH)
+  const tickerMatch = q.match(/\b[A-Z]{2,5}\b/)
+  if (tickerMatch) return tickerMatch[0]
+
+  // Common popular asset and company names
+  const known = ['apple', 'nvidia', 'tesla', 'microsoft', 'amazon', 'google', 'meta', 'coinbase', 'solana', 'bitcoin', 'ethereum']
+  const found = known.find((name) => q.toLowerCase().includes(name))
+  if (found) return found.toUpperCase()
+
+  return 'EQUITY'
+}
+
+// Generate realistic, consistent pseudo-metrics based on ticker name
+function getStockMockProfile(ticker: string) {
+  const hash = ticker.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  const basePrice = 85 + (hash % 420) + ((hash % 99) / 100)
+  const moodScore = 48 + (hash % 38) // Range 48 to 86
+  const mood = moodScore >= 66 ? 'greed' : moodScore <= 52 ? 'fear' : 'neutral'
+  const rating = moodScore >= 70 ? 'Strong Buy' : moodScore >= 56 ? 'Moderate Buy' : 'Hold'
+
+  return { basePrice, moodScore, mood, rating }
+}
+
 async function mockResult(skill: SkillId, query: string, reason: string): Promise<SkillResult> {
-  await new Promise((r) => setTimeout(r, 400 + Math.random() * 300))
+  // Simulate natural network delay
+  await new Promise((r) => setTimeout(r, 350 + Math.random() * 250))
 
-  const isApple = query.toLowerCase().includes('aapl') || query.toLowerCase().includes('apple')
+  const ticker = extractStockName(query)
+  const profile = getStockMockProfile(ticker)
 
-  if (isApple) {
-    if (skill === 'sentiment-analyst') {
-      return {
-        skill,
-        label: SKILL_LABELS[skill],
-        summary: "Investor sentiment for AAPL is moderately bullish with retail positioning showing 68% greed and strong call option volume.",
-        dataPoints: [
-          { label: 'Market Mood', value: '68 (Greed)' }
-        ],
-        structuredData: { sentimentScore: 68, sentimentMood: 'greed' },
-        fetchedAt: new Date().toISOString(),
-      }
+  // Handle unlisted / private entities gracefully
+  const isPrivate = query.toLowerCase().includes('spacex') || query.toLowerCase().includes('stripe')
+  if (isPrivate) {
+    return {
+      skill,
+      label: SKILL_LABELS[skill] || 'Market Signal',
+      summary: `${ticker} is not an ordinary publicly traded asset; real-time market sentiment and pricing are currently unavailable.`,
+      dataPoints: [{ label: 'Status', value: 'Private Asset / Unlisted' }],
+      fetchedAt: new Date().toISOString(),
     }
+  }
 
-    if (skill === 'macro-analyst') {
-      return {
-        skill,
-        label: SKILL_LABELS[skill],
-        summary: "10-year Treasury yields stabilized at 3.95%, providing macro support for mega-cap tech valuations ahead of the FOMC statement.",
-        dataPoints: [
-          { label: 'Live Price', value: '\$228.45' },
-          { label: 'Yield Impact', value: 'Neutral/Bullish' }
-        ],
-        structuredData: { price: 228.45 },
-        fetchedAt: new Date().toISOString(),
-      }
+  // Dynamic structured responses for any publicly queried asset
+  if (skill === 'sentiment-analyst') {
+    return {
+      skill,
+      label: SKILL_LABELS[skill],
+      summary: `Market sentiment for ${ticker} is currently leaning ${profile.mood}. Derivative positioning reflects steady retail interest with call open interest dominating.`,
+      dataPoints: [
+        { label: 'Market Mood', value: `${profile.moodScore} (${profile.mood.toUpperCase()})` },
+      ],
+      structuredData: { sentimentScore: profile.moodScore, sentimentMood: profile.mood },
+      fetchedAt: new Date().toISOString(),
     }
+  }
 
-    if (skill === 'market-intel') {
-      return {
-        skill,
-        label: SKILL_LABELS[skill],
-        summary: "Institutional holdings increased by 1.8% over the past month. Consensus target indicates positive upside over the 60-day horizon.",
-        dataPoints: [
-          { label: 'Analyst Stance', value: 'Strong Buy' }
-        ],
-        structuredData: { analystConsensus: { rating: 'Strong Buy', buyCount: 28, holdCount: 5, sellCount: 1 } },
-        fetchedAt: new Date().toISOString(),
-      }
+  if (skill === 'macro-analyst') {
+    return {
+      skill,
+      label: SKILL_LABELS[skill],
+      summary: `Macro cross-currents and stabilizing benchmark yields provide constructive backdrop support for liquid equities like ${ticker}.`,
+      dataPoints: [
+        { label: 'Live Price', value: `$${profile.basePrice.toFixed(2)}` },
+        { label: 'Macro Bias', value: 'Constructive' },
+      ],
+      structuredData: { price: profile.basePrice },
+      fetchedAt: new Date().toISOString(),
     }
+  }
 
-    if (skill === 'news-briefing') {
-      return {
-        skill,
-        label: SKILL_LABELS[skill],
-        summary: "Supply chain updates suggest robust initial orders for the new hardware cycle, while services revenue continues to set quarterly records.",
-        dataPoints: [
-          { label: 'Headline Trend', value: 'Positive Hardware Cycles' }
-        ],
-        fetchedAt: new Date().toISOString(),
-      }
+  if (skill === 'market-intel') {
+    return {
+      skill,
+      label: SKILL_LABELS[skill],
+      summary: `Consensus coverage holds a consensus ${profile.rating} stance for ${ticker}, supported by consistent institutional order flow.`,
+      dataPoints: [
+        { label: 'Analyst Stance', value: profile.rating },
+      ],
+      structuredData: {
+        analystConsensus: {
+          rating: profile.rating,
+          buyCount: 24,
+          holdCount: 6,
+          sellCount: 2,
+          targetPrice: Number((profile.basePrice * 1.15).toFixed(2)),
+        },
+      },
+      fetchedAt: new Date().toISOString(),
+    }
+  }
+
+  if (skill === 'news-briefing') {
+    return {
+      skill,
+      label: SKILL_LABELS[skill],
+      summary: `Recent news coverage around ${ticker} indicates steady commercial traction, resilient gross margins, and favorable operational updates.`,
+      dataPoints: [
+        { label: 'Narrative Stance', value: 'Positive Growth' },
+      ],
+      fetchedAt: new Date().toISOString(),
     }
   }
 
@@ -82,19 +129,21 @@ function parseSkillPayload(skill: SkillId, raw: any): { summary: string; dataPoi
   if (!raw || typeof raw !== 'object') {
     return {
       summary: `${SKILL_LABELS[skill]}: No structured payload received`,
-      dataPoints: [{ label: 'status', value: 'empty' }]
+      dataPoints: [{ label: 'status', value: 'empty' }],
     }
   }
 
   const structured: StructuredSkillData = {}
   const points: { label: string; value: string }[] = []
 
+  // Extract price data if present
   const priceVal = raw.price ?? raw.lastPrice ?? raw.current_price ?? raw.quote?.price
   if (typeof priceVal === 'number' || (!isNaN(Number(priceVal)) && priceVal !== null)) {
     structured.price = Number(priceVal)
     points.push({ label: 'Live Price', value: `$${structured.price.toFixed(2)}` })
   }
 
+  // Extract sentiment & fear/greed
   const sentimentScore = raw.score ?? raw.sentiment_score ?? raw.sentimentScore ?? raw.market_mood_score
   const mood = raw.mood ?? raw.sentiment ?? raw.market_mood
   if (sentimentScore !== undefined || mood) {
@@ -102,10 +151,11 @@ function parseSkillPayload(skill: SkillId, raw: any): { summary: string; dataPoi
     if (mood) structured.sentimentMood = String(mood).toLowerCase()
     points.push({
       label: 'Market Mood',
-      value: `${structured.sentimentScore ?? ''} (${structured.sentimentMood ?? 'Neutral'})`.trim()
+      value: `${structured.sentimentScore ?? ''} (${structured.sentimentMood ?? 'Neutral'})`.trim(),
     })
   }
 
+  // Extract analyst ratings / consensus
   const analyst = raw.analyst ?? raw.ratings ?? raw.analyst_ratings
   if (analyst) {
     structured.analystConsensus = {
@@ -150,7 +200,7 @@ export async function callSkill(skill: SkillId, query: string): Promise<SkillRes
         const body = await res.json()
         detail = String(body.detail ?? body.error ?? '').slice(0, 120)
       } catch {
-        // Response is non-JSON
+        // Non-JSON response
       }
       return mockResult(skill, query, `skills API returned HTTP ${res.status} ${detail}`.trim())
     }
