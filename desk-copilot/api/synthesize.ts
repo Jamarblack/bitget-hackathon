@@ -12,9 +12,6 @@ interface RequestBody {
   skillResults: SkillResultIn[]
 }
 
-// Vercel's Node.js runtime passes an Express-like req/res, not the Fetch
-// API Request/Response: req.body is pre-parsed JSON and replies go through
-// res.status().json().
 interface VercelLikeReq {
   method?: string
   body?: unknown
@@ -48,8 +45,8 @@ calmly.`
 
 const UPSTREAM_TIMEOUT_MS = 50000
 
-// Models sometimes wrap JSON in prose, <think> blocks or code fences.
-// Pull out the outermost {...} instead of assuming a perfectly clean reply.
+
+
 function extractJson(raw: string): unknown {
   const noThink = raw.replace(/<think>[\s\S]*?<\/think>/g, '')
   const start = noThink.indexOf('{')
@@ -59,8 +56,7 @@ function extractJson(raw: string): unknown {
 }
 
 function fail(res: VercelLikeRes, status: number, error: string, detail: string): void {
-  // console.error so the failure shows up in Vercel's function logs too —
-  // earlier failures returned a status silently and left the logs empty.
+
   console.error(`[api/synthesize] ${error}: ${detail}`)
   res.status(status).json({ error, detail })
 }

@@ -3,7 +3,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 export const config = { runtime: 'nodejs', maxDuration: 60 }
 
-// Use Bitget's agent endpoint; fallback to datahub if configured
+
 const MCP_URL = 'https://datahub.noxiaohao.com/mcp'
 const MCP_CONNECT_TIMEOUT_MS = 25000
 const MCP_CALL_TIMEOUT_MS = 40000

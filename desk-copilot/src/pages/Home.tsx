@@ -16,7 +16,7 @@ export function Home({ onBack }: Props) {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--color-base)] md:flex-row">
-      {/* Mobile-only top bar: sidebar is a drawer here instead of a persistent column */}
+   
       <div className="flex items-center justify-between border-b border-[var(--color-divider)] px-4 py-3 md:hidden">
         <button
           onClick={() => setRailOpen(true)}

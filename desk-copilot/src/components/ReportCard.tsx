@@ -10,7 +10,7 @@ const CONFIDENCE_LABEL: Record<ResearchReport['confidence'], string> = {
 export function ReportCard({ report }: { report: ResearchReport }) {
   const time = new Date(report.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-  // Aggregate active live metrics across skill results
+
   const metrics: { label: string; value: string }[] = []
   for (const sr of report.rawSkillResults ?? []) {
     if (sr.structuredData?.price) {

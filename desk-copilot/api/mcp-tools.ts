@@ -3,9 +3,6 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 export const config = { runtime: 'nodejs' }
 
-// TEMPORARY discovery endpoint — open /api/mcp-tools in a browser to see
-// which tools Bitget's official bitget-mcp-server exposes. Delete this
-// file once the real integration is wired.
 const MCP_URL = 'https://agent.bitget.com/mcp'
 const TIMEOUT_MS = 30000
 

@@ -58,8 +58,7 @@ function FaqItem({ q, a }: { q: string; a: string }) {
   )
 }
 
-// A jagged line settling into a smooth one — the whole product's idea,
-// as one visual: noisy market data, calmed into something plain.
+
 function CalmingLine() {
   return (
     <svg

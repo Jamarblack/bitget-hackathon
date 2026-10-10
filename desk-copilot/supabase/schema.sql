@@ -1,10 +1,4 @@
--- Plain Money schema (renamed from earlier Desk Copilot / thesis schema).
--- Run in Supabase's SQL editor. RLS assumes single-user (hackathon demo);
--- tighten policies before any multi-user deployment.
---
--- If you already ran the old `theses`/`thesis_id` schema, drop those first:
---   drop table if exists reports;
---   drop table if exists theses;
+
 
 create table if not exists watches (
   id uuid primary key default gen_random_uuid(),

@@ -1,6 +1,4 @@
-// One-off discovery script — run with `node scripts/list-mcp-tools.mjs`
-// Prints every tool bitget-mcp-server exposes, with its input schema,
-// so we can wire real calls instead of guessing tool names.
+
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 

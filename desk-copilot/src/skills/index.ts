@@ -10,14 +10,13 @@ const SKILL_LABELS: Record<SkillId, string> = {
 
 const SKILL_TIMEOUT_MS = 35000
 
-// Helper to extract a ticker or company name from natural-language queries
+
 function extractStockName(query: string): string {
   const q = query.trim()
-  // Look for 2-5 letter uppercase ticker patterns (e.g., AAPL, NVDA, TSLA, MSFT, BTC, ETH)
+
   const tickerMatch = q.match(/\b[A-Z]{2,5}\b/)
   if (tickerMatch) return tickerMatch[0]
 
-  // Common popular asset and company names
   const known = ['apple', 'nvidia', 'tesla', 'microsoft', 'amazon', 'google', 'meta', 'coinbase', 'solana', 'bitcoin', 'ethereum']
   const found = known.find((name) => q.toLowerCase().includes(name))
   if (found) return found.toUpperCase()
@@ -25,7 +24,6 @@ function extractStockName(query: string): string {
   return 'EQUITY'
 }
 
-// Generate realistic, consistent pseudo-metrics based on ticker name
 function getStockMockProfile(ticker: string) {
   const hash = ticker.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
   const basePrice = 85 + (hash % 420) + ((hash % 99) / 100)
@@ -37,13 +35,13 @@ function getStockMockProfile(ticker: string) {
 }
 
 async function mockResult(skill: SkillId, query: string, reason: string): Promise<SkillResult> {
-  // Simulate natural network delay
+  
   await new Promise((r) => setTimeout(r, 350 + Math.random() * 250))
 
   const ticker = extractStockName(query)
   const profile = getStockMockProfile(ticker)
 
-  // Handle unlisted / private entities gracefully
+
   const isPrivate = query.toLowerCase().includes('spacex') || query.toLowerCase().includes('stripe')
   if (isPrivate) {
     return {
@@ -55,7 +53,7 @@ async function mockResult(skill: SkillId, query: string, reason: string): Promis
     }
   }
 
-  // Dynamic structured responses for any publicly queried asset
+
   if (skill === 'sentiment-analyst') {
     return {
       skill,
@@ -136,14 +134,14 @@ function parseSkillPayload(skill: SkillId, raw: any): { summary: string; dataPoi
   const structured: StructuredSkillData = {}
   const points: { label: string; value: string }[] = []
 
-  // Extract price data if present
+
   const priceVal = raw.price ?? raw.lastPrice ?? raw.current_price ?? raw.quote?.price
   if (typeof priceVal === 'number' || (!isNaN(Number(priceVal)) && priceVal !== null)) {
     structured.price = Number(priceVal)
     points.push({ label: 'Live Price', value: `$${structured.price.toFixed(2)}` })
   }
 
-  // Extract sentiment & fear/greed
+
   const sentimentScore = raw.score ?? raw.sentiment_score ?? raw.sentimentScore ?? raw.market_mood_score
   const mood = raw.mood ?? raw.sentiment ?? raw.market_mood
   if (sentimentScore !== undefined || mood) {
@@ -155,7 +153,6 @@ function parseSkillPayload(skill: SkillId, raw: any): { summary: string; dataPoi
     })
   }
 
-  // Extract analyst ratings / consensus
   const analyst = raw.analyst ?? raw.ratings ?? raw.analyst_ratings
   if (analyst) {
     structured.analystConsensus = {

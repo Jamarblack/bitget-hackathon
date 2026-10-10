@@ -51,7 +51,7 @@ async function synthesizeViaApi(
         const body = await res.json()
         detail = String(body.detail ?? body.error ?? '').slice(0, 200)
       } catch {
-        // response wasn't JSON — status code alone will do
+       
       }
       return { ok: false, reason: `HTTP ${res.status} ${detail}`.trim() }
     }

@@ -10,7 +10,7 @@ export function QueryPrompt({ onSubmit, running, activeTickerHint }: Props) {
   const [value, setValue] = useState('')
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
 
-  // Rotating suggestions tailored to your rToken/US-stock thesis
+
   const suggestions = activeTickerHint
     ? [
         `Ask anything about ${activeTickerHint}...`,
