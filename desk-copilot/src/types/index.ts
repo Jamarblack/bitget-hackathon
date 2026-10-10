@@ -1,31 +1,10 @@
-export type SkillId =
-  | 'macro-analyst'
-  | 'market-intel'
-  | 'news-briefing'
-  | 'sentiment-analyst'
-  | 'technical-analysis'
-
-export interface StructuredSkillData {
-  price?: number
-  currency?: string
-  sentimentScore?: number
-  sentimentMood?: 'extreme-fear' | 'fear' | 'neutral' | 'greed' | 'extreme-greed' | string
-  analystConsensus?: {
-    rating?: string
-    buyCount?: number
-    holdCount?: number
-    sellCount?: number
-    targetPrice?: number
-  }
-  rawIndicators?: Record<string, unknown>
-}
+export type SkillId = 'stock-quote' | 'analyst-view' | 'market-mood'
 
 export interface SkillResult {
   skill: SkillId
   label: string
   summary: string
   dataPoints: { label: string; value: string }[]
-  structuredData?: StructuredSkillData
   fetchedAt: string
 }
 

@@ -1,49 +1,79 @@
-# Plain Money
+A market explainer for people who own a few stocks, not people who trade for a living. Ask a question in plain English, get a straight answer built on real market data, with the risks explained calmly instead of in finance-speak.
 
-A market explainer for everyday people who own a few stocks or are curious
-about investing — not active traders. Built for **Bitget AI Base Camp
-Hackathon S2** — AI Trading Desk track, Open Theme.
+Live demo: https://bitget-hack-copilot-wine.vercel.app
+Built for: Bitget AI Base Camp Hackathon S2, AI Trading Desk track (Open Theme), solo entry
+Who it's for
 
-Pivoted from an earlier trader-focused concept ("Desk Copilot") — same
-underlying architecture, reframed for a broader, non-expert audience: ask
-anything about the market in plain English, get an answer without jargon,
-with reasons to be cautious explained calmly rather than in technical
-risk-speak.
+Casual retail investors who hold a handful of stocks, check in occasionally, and get anxious when the news mentions their holdings. They don't want a trading terminal or a bot. They want to understand what is happening to money they already hold. First-time buyers and the investing-curious can use it too, but the design (the "how much do price swings stress you out?" field, the calm tone) is built around the anxious holder.
 
-Ask a question, the app routes it to relevant `bitget-signal` research
-sources (macro, market-intel, news, sentiment, technical), and Qwen
-synthesizes the results into: **plain-English answer → why → things to
-keep in mind → how confident**. Save stocks you're "watching" so
-follow-ups remember what you care about.
+What it does
+You ask something like "How is Apple doing?" or "Is now a bad time to check my portfolio?"
+The app works out which stock you mean (from the question, or from the stock you saved).
+A serverless function fetches live data from Bitget's official MCP data service: a quote, what analysts think, and an overall market mood score.
+Qwen turns those facts into a short plain-English answer: headline, why, things to keep in mind, how sure it is.
+If a data source fails, the answer says so in plain words. It never fills the gap with invented numbers.
 
-## Status
+It does not place trades, give buy/sell advice, or predict prices.
 
-Working end to end with **mock data** where real integrations aren't
-wired yet, clearly flagged in code:
+Data sources
 
-| File | Status |
-|---|---|
-| `src/skills/index.ts` | 4 of 5 skills wired to live `bitget-signal` MCP data; `technical-analysis` still mocked (needs local Python indicator computation) |
-| `api/synthesize.ts` + `src/lib/synthesize.ts` | Wired to real Qwen (`qwen3.8-max`), plain-language prompt |
-| `src/lib/supabase.ts` | Works without credentials (falls back to `localStorage`) |
-| `bitget-mcp-server` (US-stock fundamentals/quotes) | Not yet wired — blocked on local DNS resolution, see `scripts/list-mcp-tools.mjs` |
+All data comes from bitget-mcp-server (https://agent.bitget.com/mcp), Bitget's official MCP server. It exposes two tools, guide (browse the catalog) and do_query (run a catalog entry). Plain Money uses three entries:
 
-## Getting started (pnpm)
+What you see	Catalog entry	What it gives
+Latest price	equity_price_quote	price, change, day range, market value
+What analysts think	equity_estimates_price_target	latest rating per firm, price targets
+Overall market mood	sentiment_market_fear_greed	fear/greed score with history
 
-```bash
+Analyst ratings arrive in Chinese, so the server code translates them and groups them (bullish, neutral, bearish) before anything is summarized. Only the latest rating per firm from roughly the last six months is counted.
+
+Qwen (qwen3.8-max, through Bitget's hackathon endpoint) writes the final explanation. It is told to use only the facts it was given, never to invent causes or numbers, and never to tell anyone to buy or sell.
+
+Known limits
+No news source yet. The news catalog entry needs a numeric label id, which I did not have time to map. Questions about why a stock moved can only be answered from price, analyst and mood data, and the answer says when the reason isn't visible in the data.
+US stocks only. The tool does not use tokenized (rToken) markets.
+Prices can be a day old. When markets are closed, "latest price" is the last trading session's. I have not cross-checked the numbers against a second provider.
+A short list of company names is recognized ("Apple", "Nvidia"...). Anything else needs the ticker symbol.
+Answers take a while. Real data plus a large model usually means 20 to 40 seconds.
+No external user testing yet. Everything so far is my own testing.
+Not financial advice. It explains; it does not recommend.
+Run it locally
+bash
 pnpm install
-pnpm dev
-```
+pnpm dev                # the UI only: /api routes do not exist here
 
-To exercise the real Qwen synthesis locally, use `pnpm dlx vercel dev`
-instead (needed for `/api` routes), with `QWEN_API_KEY` set in
-`.env.local` — never as a `VITE_`-prefixed var, that would leak into the
-client bundle.
+The data and writing steps live in serverless functions, so for the full app locally use Vercel's dev server:
 
-To persist watches/reports to Supabase instead of localStorage: run
-`supabase/schema.sql` in your project's SQL editor, then fill in
-`.env.local` from `.env.example`.
+bash
+pnpm dlx vercel dev
 
-## Stack
+Create .env.local in the project root:
 
-Vite + React + TypeScript + Tailwind v4 + Supabase, managed with pnpm.
+QWEN_API_KEY=your_key_here
+
+The Qwen key is read only on the server (api/synthesize.ts). Never give it a VITE_ prefix: Vite would bundle it into the public JavaScript.
+
+Optional, for saving watches in Supabase instead of the browser's localStorage: run supabase/schema.sql in your project, then add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY. Without them the app works fine using localStorage.
+
+Project layout
+api/
+  market-data.ts     MCP client: quote, analyst view, market mood (Bitget data)
+  synthesize.ts      calls Qwen and returns the structured plain-English answer
+src/
+  pages/             Landing (FAQ for newcomers) and Home (the app)
+  components/        WatchRail, QueryPrompt, ReportCard
+  lib/router.ts      which stock is the question about?
+  lib/synthesize.ts  orchestrates data fetch, synthesis and graceful fallbacks
+  skills/index.ts    client for /api/market-data
+supabase/schema.sql  optional persistence
+vercel.json          gives the functions up to 60 seconds
+Stack
+
+React 19, TypeScript, Vite, Tailwind CSS v4, Vercel serverless functions, the Model Context Protocol TypeScript SDK, Qwen via Bitget's endpoint, Supabase (optional).
+
+Reliability notes
+
+Both external services can be slow or fail, so every call has a timeout and every failure has a visible, honest outcome: if no data arrives the app says it couldn't reach live data; if data arrives but Qwen doesn't, the app shows the raw facts it found. A dead service never leaves a spinner running forever and never produces fabricated figures.
+
+Disclaimer
+
+Plain Money is an educational explainer built for a hackathon. It is not financial advice. For decisions that matter, talk to a qualified professional.

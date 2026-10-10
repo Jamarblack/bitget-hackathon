@@ -10,7 +10,9 @@ interface RequestBody {
   query: string
   watch: { ticker: string; timeframe: string; worryLevel: string; note: string } | null
   skillResults: SkillResultIn[]
+  unavailable?: string[]
 }
+
 
 interface VercelLikeReq {
   method?: string
@@ -25,11 +27,16 @@ const SYSTEM_PROMPT = `You are the synthesis layer of Plain Money, a market
 explainer for everyday people who own a few stocks or are curious about
 investing — not active traders. They don't speak finance jargon.
 
-Given a user's question, an optional saved "watch" (a stock they're
-tracking, with why they care and how nervous market swings make them),
-and raw research signals pulled from several analysis sources, produce a
-plain-English answer. Respond with ONLY valid JSON, no markdown fences,
-no preamble, matching exactly this shape:
+You will receive JSON with:
+- "query": what the person asked
+- "watch": a stock they're tracking (or null), including how much price
+  swings stress them out
+- "skillResults": real data that was just fetched. Each has a "skill" id and
+  a "summary" of the facts
+- "unavailable": data that could not be fetched (may be empty)
+
+Write a plain-English answer using ONLY the facts in skillResults. Respond
+with ONLY valid JSON, no markdown fences, no preamble, in exactly this shape:
 
 {
   "headline": string,
@@ -38,13 +45,27 @@ no preamble, matching exactly this shape:
   "confidence": "low" | "medium" | "high"
 }
 
-Rules: no unexplained financial jargon (if you must use a term like
-"volatility" or "P/E ratio", explain it in the same sentence). Prefer
-everyday comparisons over statistics. Never sound alarmist — explain risk
-calmly.`
+- headline: one plain-English sentence that directly answers their question.
+- supportingSignals: one point per data source you used. "skill" must be one
+  of the skill ids you were given. Explain each in everyday words.
+- riskFlags: calm reasons for caution, plus a short note on anything listed
+  in "unavailable" that you could not check.
+- confidence: how well the data actually answers the question.
+
+Rules:
+- Never invent numbers, dates, causes or news. If the data shows WHAT is
+  happening but not WHY, say plainly that you can see the numbers but not
+  the reason.
+- Prices may be from the most recent trading session if markets are closed.
+- Analyst ratings are opinions, not predictions.
+- Do not tell the person to buy, sell or hold anything.
+- If the watch says price swings stress them out a lot, be extra calm and
+  reassuring, without hiding any facts.
+- No unexplained financial jargon: if you must use a term like "market
+  value" or "price target", explain it in the same sentence. Prefer everyday
+  comparisons over statistics. Never sound alarmist.`
 
 const UPSTREAM_TIMEOUT_MS = 50000
-
 
 
 function extractJson(raw: string): unknown {
@@ -56,7 +77,7 @@ function extractJson(raw: string): unknown {
 }
 
 function fail(res: VercelLikeRes, status: number, error: string, detail: string): void {
-
+ 
   console.error(`[api/synthesize] ${error}: ${detail}`)
   res.status(status).json({ error, detail })
 }
@@ -73,8 +94,8 @@ export default async function handler(req: VercelLikeReq, res: VercelLikeRes): P
     return
   }
 
-  const { query, watch, skillResults } = (req.body ?? {}) as RequestBody
-  const userContent = JSON.stringify({ query, watch, skillResults })
+  const { query, watch, skillResults, unavailable } = (req.body ?? {}) as RequestBody
+  const userContent = JSON.stringify({ query, watch, skillResults, unavailable: unavailable ?? [] })
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS)
@@ -113,12 +134,7 @@ export default async function handler(req: VercelLikeReq, res: VercelLikeRes): P
     res.status(200).json(extractJson(raw))
   } catch (err) {
     const isTimeout = err instanceof Error && err.name === 'AbortError'
-    fail(
-      res,
-      isTimeout ? 504 : 500,
-      isTimeout ? 'qwen timed out' : 'synthesis failed',
-      String(err)
-    )
+    fail(res, isTimeout ? 504 : 500, isTimeout ? 'qwen timed out' : 'synthesis failed', String(err))
   } finally {
     clearTimeout(timeout)
   }
