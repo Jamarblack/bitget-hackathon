@@ -5,11 +5,27 @@ export type SkillId =
   | 'sentiment-analyst'
   | 'technical-analysis'
 
+export interface StructuredSkillData {
+  price?: number
+  currency?: string
+  sentimentScore?: number
+  sentimentMood?: 'extreme-fear' | 'fear' | 'neutral' | 'greed' | 'extreme-greed' | string
+  analystConsensus?: {
+    rating?: string
+    buyCount?: number
+    holdCount?: number
+    sellCount?: number
+    targetPrice?: number
+  }
+  rawIndicators?: Record<string, unknown>
+}
+
 export interface SkillResult {
   skill: SkillId
   label: string
   summary: string
   dataPoints: { label: string; value: string }[]
+  structuredData?: StructuredSkillData
   fetchedAt: string
 }
 
@@ -17,8 +33,6 @@ export interface Watch {
   id: string
   ticker: string
   timeframe: string
-  // How much market swings on this stock stress the person out —
-  // renamed from trader "risk appetite" to something a layman relates to.
   worryLevel: 'not-much' | 'somewhat' | 'a-lot'
   note: string
   createdAt: string

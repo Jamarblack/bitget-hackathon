@@ -1,10 +1,12 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 
-export const config = { runtime: 'nodejs' }
+export const config = { runtime: 'nodejs', maxDuration: 60 }
 
-const MCP_URL = 'https://datahub.noxiaohao.com/mcp'
-const MCP_TIMEOUT_MS = 15000
+// Use Bitget's agent endpoint; fallback to datahub if configured
+const MCP_URL = process.env.BITGET_MCP_URL || 'https://agent.bitget.com/mcp'
+const MCP_CONNECT_TIMEOUT_MS = 25000
+const MCP_CALL_TIMEOUT_MS = 40000
 
 type SkillId = 'macro-analyst' | 'market-intel' | 'news-briefing' | 'sentiment-analyst'
 
@@ -36,24 +38,35 @@ const SKILL_CALLS: Record<SkillId, { tool: string; args: Record<string, unknown>
   ],
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     promise,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('mcp call timed out')), ms)),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)),
   ])
 }
 
 async function callMcpSkill(skill: SkillId) {
   const transport = new StreamableHTTPClientTransport(new URL(MCP_URL))
-  const client = new Client({ name: 'plain-money', version: '0.1.0' })
+  const client = new Client({ name: 'plain-money-skills', version: '0.1.0' })
 
   try {
-    await withTimeout(client.connect(transport), MCP_TIMEOUT_MS)
-    const calls = SKILL_CALLS[skill]
-    const results = await withTimeout(
-      Promise.all(calls.map((c) => client.callTool({ name: c.tool, arguments: c.args }))),
-      MCP_TIMEOUT_MS
+    await withTimeout(client.connect(transport), MCP_CONNECT_TIMEOUT_MS, 'MCP handshake')
+    const calls = SKILL_CALLS[skill] || []
+    
+    // Settle calls individually so one slow tool doesn't abort the entire payload
+    const settled = await withTimeout(
+      Promise.allSettled(calls.map((c) => client.callTool({ name: c.tool, arguments: c.args }))),
+      MCP_CALL_TIMEOUT_MS,
+      'MCP tool execution'
     )
+
+    const results = settled.map((res, idx) => {
+      if (res.status === 'fulfilled') {
+        return res.value
+      }
+      return { tool: calls[idx]?.tool, error: res.reason?.message || 'Tool call failed' }
+    })
+
     return results
   } finally {
     await client.close().catch(() => {})
@@ -68,6 +81,11 @@ export default async function handler(req: VercelLikeReq, res: VercelLikeRes): P
 
   const { skill } = (req.body ?? {}) as { skill: SkillId }
 
+  if (!skill) {
+    res.status(400).json({ error: 'Missing skill parameter' })
+    return
+  }
+
   if ((skill as string) === 'technical-analysis') {
     res.status(501).json({
       error: 'technical-analysis not wired — requires local Python indicator computation',
@@ -79,6 +97,7 @@ export default async function handler(req: VercelLikeReq, res: VercelLikeRes): P
     const raw = await callMcpSkill(skill)
     res.status(200).json({ skill, raw })
   } catch (err) {
+    console.error(`[api/skills] ${skill} failure:`, err)
     res.status(502).json({ error: 'mcp call failed or timed out', detail: String(err) })
   }
 }
