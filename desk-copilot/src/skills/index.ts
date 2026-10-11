@@ -1,6 +1,14 @@
 import type { SkillId, SkillResult } from '../types'
 
- 
+/**
+ * Live market data comes from Bitget's official bitget-mcp-server, fetched
+ * server-side by /api/market-data. Three sources:
+ *   stock-quote   latest price and basics for one stock
+ *   analyst-view  what Wall Street analysts rate it and their price targets
+ *   market-mood   an overall fear/greed index for the market
+ * A source that fails is reported as "unavailable" with the reason — it is
+ * never replaced with made-up data.
+ */
 
 const SKILL_LABELS: Record<SkillId, string> = {
   'stock-quote': 'Latest price',
@@ -21,6 +29,7 @@ interface ApiSource {
   skill: SkillId
   ok: boolean
   summary?: string
+  data?: SkillResult['structuredData']
   error?: string
 }
 
@@ -47,7 +56,14 @@ export async function fetchMarketData(symbol: string | null): Promise<MarketData
     for (const s of sources) {
       const label = SKILL_LABELS[s.skill] ?? s.skill
       if (s.ok && s.summary) {
-        results.push({ skill: s.skill, label, summary: s.summary, dataPoints: [], fetchedAt: new Date().toISOString() })
+        results.push({
+          skill: s.skill,
+          label,
+          summary: s.summary,
+          dataPoints: [],
+          structuredData: s.data,
+          fetchedAt: new Date().toISOString(),
+        })
       } else {
         unavailable.push(`${label}: ${s.error ?? 'no data'}`)
       }

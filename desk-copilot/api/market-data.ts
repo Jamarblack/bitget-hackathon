@@ -3,7 +3,9 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 export const config = { runtime: 'nodejs' }
 
-
+// Bitget's official bitget-mcp-server. It exposes two tools: `guide` (browse
+// the data catalog) and `do_query` (run one catalog entry by id). Every fetch
+// below is a do_query call using an entry id found via `guide`.
 const MCP_URL = 'https://agent.bitget.com/mcp'
 const CONNECT_TIMEOUT_MS = 15000
 const QUERY_TIMEOUT_MS = 35000
@@ -11,10 +13,24 @@ const QUERY_TIMEOUT_MS = 35000
 type SkillId = 'stock-quote' | 'analyst-view' | 'market-mood'
 type Row = Record<string, unknown>
 
+// Headline numbers the UI shows as small tiles above the written answer.
+interface StructuredData {
+  price?: number
+  sentimentScore?: number
+  sentimentMood?: string
+  analystConsensus?: { rating: string }
+}
+
+interface Summary {
+  summary: string
+  data: StructuredData
+}
+
 interface SourceResult {
   skill: SkillId
   ok: boolean
   summary?: string
+  data?: StructuredData
   error?: string
 }
 
@@ -30,7 +46,7 @@ interface VercelLikeRes {
 const SYMBOL_SHAPE = /^[A-Z][A-Z.\-]{0,5}$/
 const DISPLAY_ORDER: SkillId[] = ['stock-quote', 'analyst-view', 'market-mood']
 
-
+// The server returns analyst ratings in Chinese; translate and group them.
 const RATING_EN: Record<string, { label: string; bucket: 'bullish' | 'neutral' | 'bearish' }> = {
   强力买进: { label: 'strong buy', bucket: 'bullish' },
   买入: { label: 'buy', bucket: 'bullish' },
@@ -62,7 +78,8 @@ function reasonOf(err: unknown): string {
   return (err instanceof Error ? err.message : String(err)).slice(0, 160)
 }
 
-
+// Pulls the result rows out of a do_query reply. The server wraps rows in
+// { success, data: { results: [...] }, error } and returns it as JSON text.
 function extractRows(result: object): Row[] {
   const { content, isError } = result as { content?: unknown; isError?: unknown }
   const blocks = Array.isArray(content) ? content : []
@@ -85,7 +102,7 @@ async function doQuery(client: Client, entryId: string, params: Record<string, u
   return extractRows(result)
 }
 
-function summarizeQuote(symbol: string, r: Row): string {
+function summarizeQuote(symbol: string, r: Row): Summary {
   const price = num(r.last_price)
   if (price === null) throw new Error('the quote had no price in it')
   const prev = num(r.prev_close)
@@ -104,10 +121,10 @@ function summarizeQuote(symbol: string, r: Row): string {
   if (cap !== null) {
     s += ` Total market value about ${cap >= 1e12 ? `$${(cap / 1e12).toFixed(2)} trillion` : `$${(cap / 1e9).toFixed(1)} billion`}.`
   }
-  return s
+  return { summary: s, data: { price } }
 }
 
-function summarizeAnalysts(symbol: string, rows: Row[]): string {
+function summarizeAnalysts(symbol: string, rows: Row[]): Summary {
   const dated = rows
     .map((r) => ({
       firm: String(r.analyst_firm ?? ''),
@@ -133,6 +150,13 @@ function summarizeAnalysts(symbol: string, rows: Row[]): string {
     const m = RATING_EN[f.rating]
     if (m) counts[m.bucket] += 1
   }
+  const rated = counts.bullish + counts.neutral + counts.bearish
+  let consensus: string | undefined
+  if (rated > 0) {
+    if (counts.bullish / rated >= 0.6) consensus = `Mostly positive (${counts.bullish} of ${rated})`
+    else if (counts.bearish / rated >= 0.6) consensus = `Mostly negative (${counts.bearish} of ${rated})`
+    else consensus = `Mixed (${counts.bullish} positive, ${counts.neutral} neutral, ${counts.bearish} negative)`
+  }
   const targets = firms.map((f) => f.target).filter((t): t is number => t !== null).sort((a, b) => a - b)
 
   let s = `Analyst view on ${symbol} (latest rating from each of ${firms.length} firms over roughly the last 6 months): ${counts.bullish} bullish (buy/overweight/outperform), ${counts.neutral} neutral (hold), ${counts.bearish} bearish (underweight/underperform).`
@@ -147,10 +171,10 @@ function summarizeAnalysts(symbol: string, rows: Row[]): string {
   })
   if (recent.length > 0) s += ` Most recent: ${recent.join('; ')}.`
   s += ' Analyst ratings are opinions, not predictions.'
-  return s
+  return { summary: s, data: consensus ? { analystConsensus: { rating: consensus } } : {} }
 }
 
-function summarizeMood(r: Row): string {
+function summarizeMood(r: Row): Summary {
   const score = num(r.score)
   if (score === null) throw new Error('the mood index had no score')
   const rating = typeof r.rating === 'string' ? r.rating : 'unknown'
@@ -158,7 +182,8 @@ function summarizeMood(r: Row): string {
     const n = num(v)
     return n === null ? 'n/a' : n.toFixed(1)
   }
-  return `Overall market mood index (0 = extreme fear, 100 = extreme greed): ${score.toFixed(0)}, which is "${rating}". For comparison: previous close ${fmt(r.previous_close)}, a week ago ${fmt(r.previous_1_week)}, a month ago ${fmt(r.previous_1_month)}, a year ago ${fmt(r.previous_1_year)}.`
+  const summary = `Overall market mood index (0 = extreme fear, 100 = extreme greed): ${score.toFixed(0)}, which is "${rating}". For comparison: previous close ${fmt(r.previous_close)}, a week ago ${fmt(r.previous_1_week)}, a month ago ${fmt(r.previous_1_month)}, a year ago ${fmt(r.previous_1_year)}.`
+  return { summary, data: { sentimentScore: Math.round(score), sentimentMood: rating } }
 }
 
 export default async function handler(req: VercelLikeReq, res: VercelLikeRes): Promise<void> {
@@ -172,7 +197,7 @@ export default async function handler(req: VercelLikeReq, res: VercelLikeRes): P
   const results: SourceResult[] = []
 
   const client = new Client({ name: 'plain-money', version: '0.2.0' })
-  const tasks: { skill: SkillId; run: () => Promise<string> }[] = [
+  const tasks: { skill: SkillId; run: () => Promise<Summary> }[] = [
     {
       skill: 'market-mood',
       run: async () => summarizeMood((await doQuery(client, 'sentiment_market_fear_greed', {}))[0]),
@@ -202,7 +227,7 @@ export default async function handler(req: VercelLikeReq, res: VercelLikeRes): P
     settled.forEach((s, i) => {
       const skill = tasks[i].skill
       if (s.status === 'fulfilled') {
-        results.push({ skill, ok: true, summary: s.value })
+        results.push({ skill, ok: true, summary: s.value.summary, data: s.value.data })
       } else {
         console.error(`[api/market-data] ${skill} failed:`, s.reason)
         results.push({ skill, ok: false, error: reasonOf(s.reason) })

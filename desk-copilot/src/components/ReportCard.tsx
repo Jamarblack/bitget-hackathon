@@ -1,4 +1,4 @@
-import type { ResearchReport} from '../types'
+import type { ResearchReport } from '../types'
 import { SKILL_LABELS } from '../skills'
 
 const CONFIDENCE_LABEL: Record<ResearchReport['confidence'], string> = {
@@ -7,65 +7,68 @@ const CONFIDENCE_LABEL: Record<ResearchReport['confidence'], string> = {
   high: 'pretty confident about this',
 }
 
-export function ReportCard({ report }: { report: ResearchReport }) {
-  const time = new Date(report.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+interface Metric {
+  label: string
+  value: string
+}
 
-
-  const metrics: { label: string; value: string }[] = []
-  for (const sr of report.rawSkillResults ?? []) {
-    if (sr.structuredData?.price) {
-      metrics.push({ label: 'Price', value: `$${sr.structuredData.price.toFixed(2)}` })
+// Headline numbers pulled from whichever data sources returned them.
+function metricsFrom(report: ResearchReport): Metric[] {
+  const metrics: Metric[] = []
+  for (const source of report.rawSkillResults) {
+    const d = source.structuredData
+    if (!d) continue
+    if (typeof d.price === 'number') {
+      metrics.push({ label: 'Latest price', value: `$${d.price.toFixed(2)}` })
     }
-    if (sr.structuredData?.sentimentScore !== undefined) {
-      const mood = sr.structuredData.sentimentMood ? ` (${sr.structuredData.sentimentMood})` : ''
-      metrics.push({ label: 'Market Mood', value: `${sr.structuredData.sentimentScore}${mood}` })
+    if (d.analystConsensus?.rating) {
+      metrics.push({ label: 'Analysts', value: d.analystConsensus.rating })
     }
-    if (sr.structuredData?.analystConsensus?.rating) {
-      metrics.push({ label: 'Analyst Consensus', value: sr.structuredData.analystConsensus.rating })
+    if (typeof d.sentimentScore === 'number') {
+      const mood = d.sentimentMood ? ` (${d.sentimentMood})` : ''
+      metrics.push({ label: 'Market mood', value: `${d.sentimentScore} of 100${mood}` })
     }
   }
+  return metrics
+}
+
+export function ReportCard({ report }: { report: ResearchReport }) {
+  const time = new Date(report.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const metrics = metricsFrom(report)
 
   return (
     <article className="border-b border-dashed border-[var(--color-divider)] py-8">
-      <p className="mb-1 font-body text-sm text-[var(--color-ink-muted)]">
-        You asked, at {time}
-      </p>
+      <p className="mb-1 font-body text-sm text-[var(--color-ink-muted)]">You asked, at {time}</p>
       <p className="mb-5 font-display text-base italic text-[var(--color-ink-muted)]">"{report.query}"</p>
 
-      <h3 className="mb-3 font-display text-2xl leading-snug text-[var(--color-ink)]">{report.headline}</h3>
+      <h3 className="mb-4 font-display text-2xl leading-snug text-[var(--color-ink)]">{report.headline}</h3>
 
-      {/* Live Data Badge Strip */}
       {metrics.length > 0 && (
         <div className="mb-5 flex flex-wrap gap-2">
-          {metrics.map((m, idx) => (
+          {metrics.map((m) => (
             <div
-              key={idx}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-divider)] bg-[var(--color-surface)] px-3 py-1 font-body text-xs text-[var(--color-ink)]"
+              key={m.label}
+              className="min-w-[8.5rem] flex-1 rounded-lg border border-[var(--color-divider)] bg-[var(--color-surface)] px-3 py-2"
             >
-              <span className="text-[var(--color-ink-muted)]">{m.label}:</span>
-              <span className="font-semibold">{m.value}</span>
+              <p className="font-body text-xs text-[var(--color-ink-muted)]">{m.label}</p>
+              <p className="font-display text-lg leading-snug text-[var(--color-ink)]">{m.value}</p>
             </div>
           ))}
         </div>
       )}
 
-     <div className="mb-5 space-y-3">
-  {report.supportingSignals.map((s, i) => {
-    const label = SKILL_LABELS[s.skill] || (s.skill ? String(s.skill) : 'Market Signal')
-    return (
-      <p key={i} className="font-body text-[15px] leading-relaxed text-[var(--color-ink)]">
-        <span className="text-[var(--color-accent)]">{label}: </span>
-        {s.point}
-      </p>
-    )
-  })}
-</div>
+      <div className="mb-5 space-y-3">
+        {report.supportingSignals.map((s, i) => (
+          <p key={i} className="font-body text-[15px] leading-relaxed text-[var(--color-ink)]">
+            <span className="text-[var(--color-accent)]">{SKILL_LABELS[s.skill]}: </span>
+            {s.point}
+          </p>
+        ))}
+      </div>
 
       {report.riskFlags.length > 0 && (
         <div className="rounded-lg bg-[var(--color-caution-soft)] px-4 py-3">
-          <p className="mb-1.5 font-body text-sm font-medium text-[var(--color-caution)]">
-            Worth keeping in mind
-          </p>
+          <p className="mb-1.5 font-body text-sm font-medium text-[var(--color-caution)]">Worth keeping in mind</p>
           <div className="space-y-1">
             {report.riskFlags.map((f, i) => (
               <p key={i} className="font-body text-sm leading-relaxed text-[var(--color-ink)]">

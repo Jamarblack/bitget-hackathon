@@ -6,6 +6,12 @@ export interface SkillResult {
   summary: string
   dataPoints: { label: string; value: string }[]
   fetchedAt: string
+  structuredData?: {
+    price?: number
+    sentimentScore?: number
+    sentimentMood?: string
+    analystConsensus?: { rating: string }
+  }
 }
 
 export interface Watch {
