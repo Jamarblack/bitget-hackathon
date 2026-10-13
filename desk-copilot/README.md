@@ -48,7 +48,7 @@ pnpm dlx vercel dev
 
 Create .env.local in the project root:
 
-QWEN_API_KEY=your_key_here
+QWEN_API_KEY= 13ucHlMTD4JF6X1E
 
 The Qwen key is read only on the server (api/synthesize.ts). Never give it a VITE_ prefix: Vite would bundle it into the public JavaScript.
 
